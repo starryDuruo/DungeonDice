@@ -8,6 +8,16 @@
 import SwiftUI
 
 struct ContentView: View {
+    
+    struct DieGroup: Identifiable{
+        var id: Int
+        let diceLabel: String
+        var rollValues: [Int] = []
+        var rollString: String {
+            rollValues.map{"\($0)"}.joined(separator: ", ")
+        }
+        var subTotal: Int {rollValues.reduce(0,+)}
+    }
     enum Dice: Int, CaseIterable, Identifiable {
         case d4 = 4, d6 = 6, d8 = 8, d10 = 10, d12 = 12, d20 = 20, d100 = 100
         
@@ -17,10 +27,12 @@ struct ContentView: View {
     @State private var message = "Roll a die!"
     @State private var animationTrigger = false
     @State private var isDoneAnimating = true
-    @State private var rolls: [Int] = []
-    private var grandTotal: Int {rolls.reduce(0,+)}
+    @State private var dieGroups: [DieGroup] = []
+    private var grandTotal: Int {dieGroups.reduce(0,{$0+$1.subTotal})}
     
     var body: some View {
+        
+    
         VStack {
             
             Text("Dungeon Dice!")
@@ -29,39 +41,16 @@ struct ContentView: View {
                 .foregroundStyle(.red)
             
             GroupBox {
-                ForEach (rolls, id: \.self) { roll in
-                    Text("\(roll)")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    Divider()
+                ViewThatFits(in: .vertical) {
+                    rollList
+                    ScrollView{rollList}
                 }
-            
-            
-            HStack{
-                Text("TOTAL: \(grandTotal)")
-                    .font(.title2)
-                    .bold()
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .animation(.default, value: grandTotal)
-                
-                Spacer()
-                
-                Button("Clear") {
-                    rolls.removeAll()
-                }
-                .buttonStyle(.glass)
-                .tint(.red)
-                .disabled(rolls.isEmpty)
-            }
             }label: {
                 Text("Session Rolls:")
                     .font(.title2)
                     .bold()
             }
-            
             Spacer()
-          
             Text(message)
                 .font(.title)
                 .multilineTextAlignment(.center)
@@ -72,16 +61,11 @@ struct ContentView: View {
                         isDoneAnimating = true
                     }
                 }
-            
-            Spacer()
-            
+
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110))]) {
                 ForEach(Dice.allCases) { die in
                     Button("\(die.rawValue)-sided") {
-                        animationTrigger.toggle()
-                        let roll = die.roll
-                        message = "You rolled a \(roll) on a \(die)."
-                        rolls.append(roll)
+                        performRoll(die: die)
                     }
                     .font(.title2)
                     .lineLimit(1)
@@ -92,6 +76,76 @@ struct ContentView: View {
             }
         }
         .padding()
+    }
+    
+    func performRoll(die:Dice){
+        animationTrigger.toggle()
+        let roll = die.roll
+        message = "You rolled a \(roll) on a \(die)."
+        
+        withAnimation(.snappy) {
+            if let index = dieGroups.firstIndex(where: {$0.id == die.rawValue}){
+                dieGroups[index].rollValues.append(roll)
+            }else{
+                dieGroups.append(DieGroup(id: die.rawValue, diceLabel: "\(die)", rollValues: [roll]))
+            }
+            dieGroups.sort{$0.id < $1.id}
+        }
+     
+    }
+    
+    @ViewBuilder
+    private var rollList: some View{
+        
+        LazyVStack(alignment: .leading){
+            if dieGroups.isEmpty{
+                Text("No rolls yet - tap a die below.")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.title3)
+                Divider()
+            }else{
+                ForEach (dieGroups) { dieGroup in
+                    HStack{
+                        CountBadge(dieCount: dieGroup.rollValues.count)
+                        Text(dieGroup.diceLabel)
+                            .fontWeight(.semibold)
+                            .padding(.trailing,6)
+                        Text(dieGroup.rollString)
+                            .foregroundStyle(.secondary)
+                            .italic()
+                        Spacer()
+                        Text("\(dieGroup.subTotal)")
+                    }
+                    .font(.title3)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.default, value: dieGroup.subTotal)
+                    
+                    Divider()
+                }
+                HStack{
+                    Text("TOTAL: \(grandTotal)")
+                        .font(.title2)
+                        .bold()
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    
+                    Spacer()
+                    
+                    Button("Clear") {
+                        withAnimation(.snappy) {
+                            dieGroups.removeAll()
+                        }
+                        
+                        message = "Roll a die!"
+                    }
+                    .buttonStyle(.glass)
+                    .tint(.red)
+                    .disabled(dieGroups.isEmpty)
+                }
+            }
+        }
     }
 }
 
